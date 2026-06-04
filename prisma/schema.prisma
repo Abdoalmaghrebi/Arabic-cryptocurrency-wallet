@@ -1,0 +1,406 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum LanguageCode {
+  AR
+  EN
+}
+
+enum ThemeMode {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+enum WalletProviderType {
+  PRIVY
+  WEB3AUTH
+  MAGIC
+  CUSTOM
+}
+
+enum WalletStatus {
+  ACTIVE
+  DISABLED
+  ARCHIVED
+}
+
+enum ChainType {
+  EVM
+}
+
+enum NetworkStatus {
+  ACTIVE
+  INACTIVE
+  DEPRECATED
+}
+
+enum TransactionType {
+  NATIVE_TRANSFER
+  TOKEN_TRANSFER
+  CONTRACT_CALL
+}
+
+enum TransactionStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  DROPPED
+}
+
+enum SessionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum NotificationType {
+  SECURITY
+  TRANSACTION
+  SYSTEM
+  MARKETING
+}
+
+enum AuditAction {
+  USER_LOGIN
+  USER_LOGOUT
+  WALLET_CREATED
+  WALLET_LINKED
+  WALLET_DISABLED
+  TRANSACTION_SENT
+  TRANSACTION_CONFIRMED
+  TRANSACTION_FAILED
+  SETTINGS_UPDATED
+  SECURITY_EVENT
+}
+
+model User {
+  id           String       @id @default(cuid())
+  telegramId   BigInt       @unique
+  username     String?
+  firstName    String?
+  lastName     String?
+  avatarUrl    String?
+  languageCode LanguageCode @default(AR)
+  status       UserStatus   @default(ACTIVE)
+  isPremium    Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  telegramProfile TelegramProfile?
+  settings        UserSetting?
+  wallets         Wallet[]
+  sessions        AuthSession[]
+  devices         DeviceSession[]
+  notifications   Notification[]
+  transactions    WalletTransaction[]
+  balances        WalletBalance[]
+  auditLogs       AuditLog[]
+  supportTickets  SupportTicket[]
+
+  @@index([username])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model TelegramProfile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  telegramId   BigInt   @unique
+  username     String?
+  firstName    String?
+  lastName     String?
+  photoUrl     String?
+  languageCode String?
+  isBot        Boolean  @default(false)
+  rawInitData  Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([telegramId])
+}
+
+model UserSetting {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  themeMode           ThemeMode @default(SYSTEM)
+  notificationsEnabled Boolean   @default(true)
+  biometricEnabled    Boolean   @default(false)
+  passkeyEnabled      Boolean   @default(false)
+  hideSmallBalances   Boolean   @default(false)
+  currencyCode        String    @default("USD")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuthSession {
+  id               String        @id @default(cuid())
+  userId           String
+  refreshTokenHash String        @unique
+  accessTokenJti    String?      @unique
+  status           SessionStatus @default(ACTIVE)
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  lastUsedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model DeviceSession {
+  id          String        @id @default(cuid())
+  userId      String
+  deviceId    String
+  deviceName  String?
+  platform    String?
+  browser     String?
+  ipAddress   String?
+  userAgent   String?
+  isTrusted   Boolean       @default(false)
+  status      SessionStatus @default(ACTIVE)
+  lastSeenAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@index([status])
+}
+
+model Wallet {
+  id               String              @id @default(cuid())
+  userId           String
+  providerType     WalletProviderType
+  providerWalletId String?             @unique
+  address          String
+  chainType        ChainType           @default(EVM)
+  status           WalletStatus        @default(ACTIVE)
+  isPrimary        Boolean             @default(false)
+  label            String?
+  metadata         Json?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balances     WalletBalance[]
+  transactions WalletTransaction[]
+
+  @@unique([userId, address])
+  @@index([userId])
+  @@index([address])
+  @@index([status])
+  @@index([isPrimary])
+}
+
+model Network {
+  id             String        @id @default(cuid())
+  chainId        Int           @unique
+  name           String
+  shortName      String?
+  chainType      ChainType     @default(EVM)
+  nativeSymbol   String
+  nativeDecimals Int           @default(18)
+  rpcUrl         String?
+  explorerUrl    String?
+  blockTimeSec   Int?
+  logoUrl        String?
+  status         NetworkStatus @default(ACTIVE)
+  isTestnet      Boolean       @default(false)
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  tokens       Token[]
+  balances     WalletBalance[]
+  transactions WalletTransaction[]
+
+  @@index([chainId])
+  @@index([status])
+  @@index([isTestnet])
+}
+
+model Token {
+  id              String   @id @default(cuid())
+  networkId       String
+  contractAddress String?
+  symbol          String
+  name            String
+  decimals        Int
+  logoUrl         String?
+  coingeckoId     String?
+  verified        Boolean  @default(false)
+  isNative        Boolean  @default(false)
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  network      Network           @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  balances     WalletBalance[]
+  transactions WalletTransaction[]
+
+  @@unique([networkId, contractAddress])
+  @@index([networkId])
+  @@index([symbol])
+  @@index([isNative])
+}
+
+model WalletBalance {
+  id               String   @id @default(cuid())
+  userId           String
+  walletId         String
+  networkId        String
+  tokenId          String
+  amountRaw        String   @default("0")
+  amountFormatted  Decimal  @db.Decimal(36, 18)
+  usdValue         Decimal? @db.Decimal(36, 18)
+  priceUsd         Decimal? @db.Decimal(36, 18)
+  lastSyncedAt     DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet  Wallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  network Network @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  token   Token   @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@unique([walletId, tokenId])
+  @@index([userId])
+  @@index([walletId])
+  @@index([networkId])
+  @@index([tokenId])
+}
+
+model WalletTransaction {
+  id              String            @id @default(cuid())
+  userId          String
+  walletId        String
+  networkId       String
+  tokenId         String?
+  type            TransactionType
+  status          TransactionStatus @default(PENDING)
+  txHash          String            @unique
+  fromAddress     String
+  toAddress       String
+  contractAddress String?
+  amountRaw       String            @default("0")
+  amountFormatted Decimal?          @db.Decimal(36, 18)
+  gasLimit        String?
+  gasPrice        String?
+  gasUsed         String?
+  nonce           Int?
+  blockNumber     BigInt?
+  blockTimestamp  DateTime?
+  feeNative       String?
+  feeUsd          Decimal?         @db.Decimal(36, 18)
+  errorMessage    String?
+  explorerUrl     String?
+  metadata        Json?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet  Wallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  network Network @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  token   Token?  @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([walletId])
+  @@index([networkId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean          @default(false)
+  sentAt    DateTime?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String       @id @default(cuid())
+  userId     String?
+  action     AuditAction
+  entityType String?
+  entityId   String?
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model SupportTicket {
+  id        String   @id @default(cuid())
+  userId    String
+  subject   String
+  message   String
+  status    String   @default("OPEN")
+  priority  String   @default("NORMAL")
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
+
+model AppSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+  @@index([isPublic])
+}
